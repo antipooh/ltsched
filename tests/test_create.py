@@ -1,65 +1,93 @@
-from ltsched.model import BaseScenarioEventObject, Scenario, event_handler
+from enum import Enum
+
+import pytest
+
+from ltsched.model import Scenario, event_handler, on_enter, on_exit, to_str_list
 
 
-def test_registry_handlers():
-    class Event1(BaseScenarioEventObject):
-        name = 'event1'
+class FakeState(Enum):
+    State1 = 'state1'
+    State2 = 'state2'
+    State3 = 'state3'
 
-    class Event2(BaseScenarioEventObject):
-        name = 'event2'
 
-    class Event3(BaseScenarioEventObject):
-        name = 'event3'
+class FakeEnum(Enum):
+    Event1 = 'event1'
+    Event2 = 'event2'
 
+
+@pytest.mark.parametrize('input, result', (
+        ('state2', ['state2']),
+        ('state2, state3', ['state2', 'state3']),
+        (('state2',), ['state2']),
+        (('state2', 'state3'), ['state2', 'state3']),
+        (FakeState.State1, ['state1']),
+        ((FakeState.State1, FakeState.State2), ['state1', 'state2']),
+))
+def test_to_str_list(input, result):
+    assert to_str_list(input) == result
+
+
+def test_registry_event_handlers():
     class FakeScenario(Scenario):
 
-        @event_handler('signal1', ())
+        @event_handler(FakeEnum.Event1, [('*', 'state2, state3')])
         async def handler1(self, *args):
-            return 12
+            pass
 
-        @event_handler(['signal2', 'signal3'], ())
+        @event_handler('*', [('state2', (FakeState.State1, FakeState.State3))])
         async def handler2(self, *args):
             pass
 
-        @event_handler(Event1, ())
-        async def handler3(self, *args):
-            pass
-
-        @event_handler([Event2, Event3], ())
-        async def handler4(self, *args):
-            pass
-
-    assert FakeScenario.handlers['signal1'] == FakeScenario.handler1
-    assert FakeScenario.handlers['signal2'] == FakeScenario.handler2
-    assert FakeScenario.handlers['signal3'] == FakeScenario.handler2
-    assert FakeScenario.handlers['event1'] == FakeScenario.handler3
-    assert FakeScenario.handlers['event2'] == FakeScenario.handler4
-    assert FakeScenario.handlers['event3'] == FakeScenario.handler4
+    assert FakeScenario.event_handlers['*']['event1'] == FakeScenario.handler1
+    assert FakeScenario.event_handlers['state2']['*'] == FakeScenario.handler2
 
 
-def test_inherited_handlers():
+def test_inherited_event_handlers():
     class ParentScenario(Scenario):
 
-        @event_handler('signal1', ())
+        @event_handler('signal1', [('state1', 'state2, state3')])
         async def handler1(self, *args):
             pass
 
-        @event_handler('signal2', ())
+        @event_handler('signal2', [('state3', 'state3')])
         async def handler2(self, *args):
             pass
 
     class ChildScenario(ParentScenario):
 
-        @event_handler('signal2', ())
+        @event_handler('signal2', [('state3', 'state4')])
         async def handler1(self, *args):
             pass
 
-        @event_handler('signal3', ())
+        @event_handler('signal3', [('state1', 'state2, state3')])
         async def handler2(self, *args):
             pass
 
-    assert ParentScenario.handlers['signal1'] == ParentScenario.handler1
-    assert ParentScenario.handlers['signal2'] == ParentScenario.handler2
-    assert ChildScenario.handlers['signal1'] == ParentScenario.handler1
-    assert ChildScenario.handlers['signal2'] == ChildScenario.handler1
-    assert ChildScenario.handlers['signal3'] == ChildScenario.handler2
+    assert ParentScenario.event_handlers['state1']['signal1'] == ParentScenario.handler1
+    assert ChildScenario.event_handlers['state3']['signal2'] == ChildScenario.handler1
+    assert ChildScenario.event_handlers['state1']['signal3'] == ChildScenario.handler2
+
+
+def test_registry_transition_handlers():
+    class FakeScenario(Scenario):
+
+        @on_exit('state2, state3')
+        async def handler1(self, *args):
+            pass
+
+        @on_enter('*')
+        async def handler2(self, *args):
+            pass
+
+        @on_exit((FakeState.State1, FakeState.State3))
+        async def handler3(self, *args):
+            pass
+
+    assert FakeScenario.transition_handlers['state1'] == [FakeScenario.handler3]
+    assert FakeScenario.transition_handlers['state2'] == [FakeScenario.handler1]
+    assert FakeScenario.transition_handlers['state3'] == [FakeScenario.handler1, FakeScenario.handler3]
+    assert FakeScenario.transition_handlers['*'] == [FakeScenario.handler2]
+    assert FakeScenario.handler1.__transitions__.on_exit is True
+    assert FakeScenario.handler2.__transitions__.on_exit is False
+    assert FakeScenario.handler3.__transitions__.on_exit is True

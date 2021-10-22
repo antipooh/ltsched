@@ -13,8 +13,13 @@ class FakeState(Enum):
     Closed = 'closed'
 
 
+class Event(Enum):
+    Flag = 'flag'
+    Signal = 'signal'
+
+
 class FlagEvent(BaseScenarioEventObject):
-    name = 'flag'
+    type = Event.Flag
 
 
 class FakeScenario(Scenario):
@@ -22,11 +27,11 @@ class FakeScenario(Scenario):
     start_state = FakeState.WaitSignal
     end_states = frozenset((FakeState.Error, FakeState.Closed))
 
-    @event_handler('signal', ())
+    @event_handler(Event.Signal, [(FakeState.WaitSignal, (FakeState.WaitFlag, FakeState.Closed))])
     async def on_signal(self, event: str):
         print('on_signal')
 
-    @event_handler(FlagEvent, ())
+    @event_handler(Event.Flag, [(FakeState.WaitFlag, '*')])
     async def check_flag(self, event: str):
         print('check_flag')
 
