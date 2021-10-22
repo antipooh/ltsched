@@ -1,6 +1,6 @@
-from asyncio import Protocol
+
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional, Protocol, Union
 
 TimePoint = Union[None, datetime, timedelta]
 
