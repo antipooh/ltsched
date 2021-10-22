@@ -123,21 +123,22 @@ class ScenarioMeta(abc.ABCMeta):
     def __new__(mcs, name, bases, namespace, **kwargs):
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         event_handlers = defaultdict(dict)
-        transition_handlers = defaultdict(list)
+        transition_handlers = defaultdict(dict)
         for base in bases:
             base_event_handlers = getattr(base, 'event_handlers', None)
             if base_event_handlers:
                 event_handlers |= base_event_handlers
             base_transition_handlers = getattr(base, 'transition_handlers', None)
             if base_transition_handlers:
-                transition_handlers |= base_transition_handlers
+                transition_handlers |= {k: {it.__name__: it for it in v}
+                                        for k, v in base_transition_handlers.items()}
         for attr in cls.__dict__.values():
             if hasattr(attr, '__events__'):
                 mcs.register_event_handler(event_handlers, attr)
             if hasattr(attr, '__transitions__'):
                 mcs.register_transition_handler(transition_handlers, attr)
         cls.event_handlers = event_handlers
-        cls.transition_handlers = transition_handlers
+        cls.transition_handlers = {k: list(v.values()) for k, v in transition_handlers.items()}
         return cls
 
     @staticmethod
@@ -149,12 +150,12 @@ class ScenarioMeta(abc.ABCMeta):
                 registry[state][event_type] = handler
 
     @staticmethod
-    def register_transition_handler(registry: TransitionHandlersRegistry, handler: TransitionHandler) -> None:
+    def register_transition_handler(registry: Dict[str, Dict[str, TransitionHandler]],
+                                    handler: TransitionHandler) -> None:
         # noinspection PyUnresolvedReferences
         handler_descr: TransitionHandlerDescriptor = handler.__transitions__
-        print('handler_descr', handler_descr)
         for state in handler_descr.states:
-            registry[state].append(handler)
+            registry[state][handler.__name__] = handler
 
 
 class Scenario(metaclass=ScenarioMeta):
@@ -162,7 +163,7 @@ class Scenario(metaclass=ScenarioMeta):
     start_state: ClassVar[str]
     end_states: ClassVar[FrozenSet[str]]
     event_handlers: ClassVar[EventHandlersRegistry]  # {state: {event: handler}}
-    transition_handlers: ClassVar[TransitionHandlersRegistry]
+    transition_handlers: ClassVar[TransitionHandlersRegistry]  # {state: [handler]}
     store: Optional[ScenarioStore]
     scenario_id: Optional[ScenarioId]
 

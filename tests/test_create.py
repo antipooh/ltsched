@@ -91,3 +91,29 @@ def test_registry_transition_handlers():
     assert FakeScenario.handler1.__transitions__.on_exit is True
     assert FakeScenario.handler2.__transitions__.on_exit is False
     assert FakeScenario.handler3.__transitions__.on_exit is True
+
+
+def test_inherited_transition_handlers():
+    class ParentScenario(Scenario):
+
+        @on_exit('state2, state3')
+        async def handler1(self, *args):
+            pass
+
+        @on_enter('*')
+        async def handler2(self, *args):
+            pass
+
+    class ChildScenario(ParentScenario):
+
+        @on_exit('state2, state3')
+        async def handler1(self, *args):
+            pass
+
+        @on_enter('*')
+        async def handler3(self, *args):
+            pass
+
+    assert ChildScenario.transition_handlers['state2'] == [ChildScenario.handler1]
+    assert ChildScenario.transition_handlers['state3'] == [ChildScenario.handler1]
+    assert ChildScenario.transition_handlers['*'] == [ParentScenario.handler2, ChildScenario.handler3]
