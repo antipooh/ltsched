@@ -2,7 +2,8 @@ from enum import Enum
 
 import pytest
 
-from ltsched.model import Scenario, event_handler, on_enter, on_exit, to_str_list
+import ltsched.scenario
+from ltsched.scenario import Scenario, event_handler, on_enter, on_exit, to_str_list
 
 
 class FakeState(Enum):
@@ -88,9 +89,9 @@ def test_registry_transition_handlers():
     assert FakeScenario.transition_handlers['state2'] == [FakeScenario.handler1]
     assert FakeScenario.transition_handlers['state3'] == [FakeScenario.handler1, FakeScenario.handler3]
     assert FakeScenario.transition_handlers['*'] == [FakeScenario.handler2]
-    assert FakeScenario.handler1.__transitions__.on_exit is True
-    assert FakeScenario.handler2.__transitions__.on_exit is False
-    assert FakeScenario.handler3.__transitions__.on_exit is True
+    assert ltsched.scenario.on_exit is True
+    assert ltsched.scenario.on_exit is False
+    assert ltsched.scenario.on_exit is True
 
 
 def test_inherited_transition_handlers():

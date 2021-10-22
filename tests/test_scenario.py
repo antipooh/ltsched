@@ -2,8 +2,9 @@ from enum import Enum
 
 import pytest
 
-from ltsched.model import BaseScenarioEventObject, Scenario, event_handler
+from ltsched.model import BaseScenarioEventObject
 from ltsched.protocols import TaskScheduler
+from ltsched.scenario import Scenario, event_handler
 
 
 class FakeState(Enum):
