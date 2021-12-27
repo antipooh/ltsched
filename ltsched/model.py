@@ -15,10 +15,11 @@ class ScenarioExecutionStatus(Enum):
     Error = 'error'
 
 
+@dataclass
 class BaseScenarioStore:
+    state: str
     exec_state: ScenarioExecutionStatus = ScenarioExecutionStatus.Run
     error: Optional[str] = None
-    state: str
     next_run: Optional[datetime] = None
 
 
