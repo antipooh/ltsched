@@ -14,7 +14,7 @@ from .protocols import ScenarioId, ScenarioStore, ScenarioStoreRepo, TaskSchedul
 @dataclass
 class HandlerResult:
     state: str
-    next_event: Optional[ScenarioEvent]
+    next_event: Optional[ScenarioEvent] = None
     next_run: Optional[TimePoint] = None
 
 
@@ -47,8 +47,8 @@ def to_str_list(value: Iterable[Union[str, Enum]]) -> List[str]:
 
 
 def event_handler(events: Union[str, Enum, Iterable[str], Iterable[Enum]],
-                  transitions: Iterable[Transition]):
-    def inner(method):
+                  transitions: Iterable[Transition]) -> Callable[[EventHandler], EventHandler]:
+    def inner(method: EventHandler) -> EventHandler:
         in_state = set()
         out_state = set()
         for transition in transitions:
@@ -69,8 +69,8 @@ class TransitionHandlerDescriptor:
     on_exit: bool
 
 
-def _on_transition(state: TransitionState, run_on_exit: bool):
-    def inner(method):
+def _on_transition(state: TransitionState, run_on_exit: bool) -> Callable[[TransitionHandler], TransitionHandler]:
+    def inner(method: TransitionHandler) -> TransitionHandler:
         states = set(chain(to_str_list(state)))
         method.__transitions__ = TransitionHandlerDescriptor(states=tuple(states), on_exit=run_on_exit)
         return method
@@ -82,6 +82,13 @@ on_enter = partial(_on_transition, run_on_exit=False)
 on_exit = partial(_on_transition, run_on_exit=True)
 EventHandlersRegistry = Dict[str, Dict[str, EventHandler]]
 TransitionHandlersRegistry = Dict[str, List[TransitionHandler]]
+
+
+def register_event_handler(registry: EventHandlersRegistry, handler: EventHandler) -> None:
+    handler_descr: EventHandlerDescriptor = getattr(handler, '__events__')
+    for state in handler_descr.in_state:
+        for event_type in handler_descr.events:
+            registry[state][event_type] = handler
 
 
 class ScenarioMeta(abc.ABCMeta):
@@ -100,7 +107,7 @@ class ScenarioMeta(abc.ABCMeta):
                                         for k, v in base_transition_handlers.items()}
         for attr in cls.__dict__.values():
             if hasattr(attr, '__events__'):
-                mcs.register_event_handler(event_handlers, attr)
+                register_event_handler(event_handlers, attr)
             if hasattr(attr, '__transitions__'):
                 mcs.register_transition_handler(transition_handlers, attr)
         cls.event_handlers = event_handlers
@@ -108,17 +115,9 @@ class ScenarioMeta(abc.ABCMeta):
         return cls
 
     @staticmethod
-    def register_event_handler(registry: EventHandlersRegistry, handler: EventHandler) -> None:
-        handler_descr: EventHandlerDescriptor = getattr(handler, '__events__')
-        for state in handler_descr.in_state:
-            for event_type in handler_descr.events:
-                registry[state][event_type] = handler
-
-    @staticmethod
     def register_transition_handler(registry: Dict[str, Dict[str, TransitionHandler]],
                                     handler: TransitionHandler) -> None:
-        # noinspection PyUnresolvedReferences
-        handler_descr: TransitionHandlerDescriptor = handler.__transitions__
+        handler_descr: TransitionHandlerDescriptor = getattr(handler, '__transitions__')
         for state in handler_descr.states:
             registry[state][handler.__name__] = handler
 
@@ -137,6 +136,30 @@ class Scenario(metaclass=ScenarioMeta):
         self.store_repo = store_repo
         self.store = None
         self.scenario_id = None
+
+    @classmethod
+    def add_event_handler(cls, events: Union[str, Enum, Iterable[str], Iterable[Enum]],
+                          transitions: Iterable[Transition],
+                          handler: EventHandler) -> None:
+        prepared_handler = event_handler(events, transitions)(handler)
+        register_event_handler(cls.event_handlers, prepared_handler)
+
+    @classmethod
+    def _register_transition_handler(cls, handler: TransitionHandler):
+        handler_descr: TransitionHandlerDescriptor = getattr(handler, '__transitions__')
+        for state in handler_descr.states:
+            handlers = cls.transition_handlers.setdefault(state, [])
+            handlers.append(handler)
+
+    @classmethod
+    def add_enter_handler(cls, state: TransitionState, handler: TransitionHandler) -> None:
+        prepared_handler = _on_transition(state, run_on_exit=False)(handler)
+        cls._register_transition_handler(prepared_handler)
+
+    @classmethod
+    def add_exit_handler(cls, state: TransitionState, handler: TransitionHandler) -> None:
+        prepared_handler = _on_transition(state, run_on_exit=True)(handler)
+        cls._register_transition_handler(prepared_handler)
 
     def __str__(self):
         return f'{self.__class__.name}({self.name}):{self.scenario_id}'

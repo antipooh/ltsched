@@ -2,7 +2,6 @@ from enum import Enum
 
 import pytest
 
-import ltsched.scenario
 from ltsched.scenario import Scenario, event_handler, on_enter, on_exit, to_str_list
 
 
@@ -115,3 +114,41 @@ def test_inherited_transition_handlers():
     assert ChildScenario.transition_handlers['state2'] == [ChildScenario.handler1]
     assert ChildScenario.transition_handlers['state3'] == [ChildScenario.handler1]
     assert ChildScenario.transition_handlers['*'] == [ParentScenario.handler2, ChildScenario.handler3]
+
+
+def test_add_event_handler():
+    class FakeScenario(Scenario):
+
+        @event_handler(FakeEnum.Event1, [('*', 'state2, state3')])
+        async def handler1(self, *args):
+            pass
+
+    async def handler2(self, *args):
+        pass
+
+    FakeScenario.add_event_handler('*', [('state2', (FakeState.State1, FakeState.State3))], handler2)
+
+    assert FakeScenario.event_handlers['*']['event1'] == FakeScenario.handler1
+    assert FakeScenario.event_handlers['state2']['*'] == handler2
+
+
+def test_add_transition_handlers():
+    class FakeScenario(Scenario):
+
+        @on_exit('state2, state3')
+        async def handler1(self, *args):
+            pass
+
+    async def handler2(*args):
+        pass
+
+    async def handler3(*args):
+        pass
+
+    FakeScenario.add_enter_handler('*', handler2)
+    FakeScenario.add_exit_handler((FakeState.State1, FakeState.State3), handler3)
+
+    assert FakeScenario.transition_handlers['state1'] == [handler3]
+    assert FakeScenario.transition_handlers['state2'] == [FakeScenario.handler1]
+    assert FakeScenario.transition_handlers['state3'] == [FakeScenario.handler1, handler3]
+    assert FakeScenario.transition_handlers['*'] == [handler2]
