@@ -52,6 +52,7 @@ def event_handler(events: Union[str, Enum, Iterable[str], Iterable[Enum]],
         in_state = set()
         out_state = set()
         for transition in transitions:
+            assert len(transition) == 2, "Transition descriptor must have 'in' and 'out' states"
             in_state |= set(to_str_list(transition[0]))
             out_state |= set(to_str_list(transition[1]))
         method.__events__ = EventHandlerDescriptor(events=tuple(to_str_list(events)),
@@ -68,17 +69,17 @@ class TransitionHandlerDescriptor:
     on_exit: bool
 
 
-def _on_transition(state: TransitionState, on_exit: bool):
+def _on_transition(state: TransitionState, run_on_exit: bool):
     def inner(method):
         states = set(chain(to_str_list(state)))
-        method.__transitions__ = TransitionHandlerDescriptor(states=tuple(states), on_exit=on_exit)
+        method.__transitions__ = TransitionHandlerDescriptor(states=tuple(states), on_exit=run_on_exit)
         return method
 
     return inner
 
 
-on_enter = partial(_on_transition, on_exit=False)
-on_exit = partial(_on_transition, on_exit=True)
+on_enter = partial(_on_transition, run_on_exit=False)
+on_exit = partial(_on_transition, run_on_exit=True)
 EventHandlersRegistry = Dict[str, Dict[str, EventHandler]]
 TransitionHandlersRegistry = Dict[str, List[TransitionHandler]]
 
@@ -108,8 +109,7 @@ class ScenarioMeta(abc.ABCMeta):
 
     @staticmethod
     def register_event_handler(registry: EventHandlersRegistry, handler: EventHandler) -> None:
-        # noinspection PyUnresolvedReferences
-        handler_descr: EventHandlerDescriptor = handler.__events__
+        handler_descr: EventHandlerDescriptor = getattr(handler, '__events__')
         for state in handler_descr.in_state:
             for event_type in handler_descr.events:
                 registry[state][event_type] = handler
@@ -199,15 +199,15 @@ class Scenario(metaclass=ScenarioMeta):
     def check_new_state(self, handler: EventHandler, state: str) -> None:
         # noinspection PyUnresolvedReferences
         descr: EventHandlerDescriptor = handler.__events__
-        if descr.out_state != '*' and not state in descr.out_state:
+        if descr.out_state != '*' and state not in descr.out_state:
             raise ScenarioWarning(f'Event handler {handler.__name__} in {self} return not allowed state "{state}"')
 
-    async def run_transition_handlers(self, state: str, on_exit: bool):
+    async def run_transition_handlers(self, state: str, run_on_exit: bool):
         handlers = self.transition_handlers.get(state, [])
         handlers.extend(self.transition_handlers.get('*', []))
         for handler in handlers:
             descr: TransitionHandlerDescriptor = handler.__transitions__
-            if descr.on_exit == on_exit:
+            if descr.on_exit == run_on_exit:
                 result_or_awaitable = handler()
                 if isawaitable(result_or_awaitable):
                     await result_or_awaitable
