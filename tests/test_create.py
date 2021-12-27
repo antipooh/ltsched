@@ -89,9 +89,6 @@ def test_registry_transition_handlers():
     assert FakeScenario.transition_handlers['state2'] == [FakeScenario.handler1]
     assert FakeScenario.transition_handlers['state3'] == [FakeScenario.handler1, FakeScenario.handler3]
     assert FakeScenario.transition_handlers['*'] == [FakeScenario.handler2]
-    assert ltsched.scenario.on_exit is True
-    assert ltsched.scenario.on_exit is False
-    assert ltsched.scenario.on_exit is True
 
 
 def test_inherited_transition_handlers():
